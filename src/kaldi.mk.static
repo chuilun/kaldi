@@ -1,0 +1,120 @@
+# This file was generated using the following command:
+# ./configure --static --static-fst=yes --mkl-root=/aifs1/tools/INTEL/mkl2017/mkl
+
+CONFIGURE_VERSION := 6
+
+# Toolchain configuration
+
+CXX = g++
+AR = ar
+AS = as
+RANLIB = ranlib
+
+# Base configuration
+
+DOUBLE_PRECISION = 0
+OPENFSTINC = /aifs1/users/wd007/src/KALDI/kaldi-target/tools/openfst/include
+OPENFSTLIBS = /aifs1/users/wd007/src/KALDI/kaldi-target/tools/openfst/lib/libfst.a
+OPENFSTLDFLAGS = 
+
+MKLROOT = /aifs1/tools/INTEL/mkl2017/mkl
+MKLLIB = /aifs1/tools/INTEL/mkl2017/mkl/lib/intel64
+
+# MKL specific Linux configuration
+
+# We have tested Kaldi with MKL version 10.2 on Linux/GCC and Intel(R) 64
+# architecture (also referred to as x86_64) with LP64 interface layer.
+
+# The linking flags for MKL will be very different depending on the OS,
+# architecture, compiler, etc. used. The correct flags can be obtained from
+# http://software.intel.com/en-us/articles/intel-mkl-link-line-advisor/
+# Use the options obtained from this website to manually configure for other
+# platforms using MKL.
+
+ifndef DOUBLE_PRECISION
+$(error DOUBLE_PRECISION not defined.)
+endif
+ifndef OPENFSTINC
+$(error OPENFSTINC not defined.)
+endif
+ifndef OPENFSTLIBS
+$(error OPENFSTLIBS not defined.)
+endif
+ifndef MKLROOT
+$(error MKLROOT not defined.)
+endif
+
+MKLLIB ?= $(MKLROOT)/lib/em64t
+
+CXXFLAGS = -std=c++11 -I.. -I$(OPENFSTINC) $(EXTRA_CXXFLAGS) \
+           -Wall -Wno-sign-compare -Wno-unused-local-typedefs \
+           -Wno-deprecated-declarations -Winit-self \
+           -DKALDI_DOUBLEPRECISION=$(DOUBLE_PRECISION) \
+           -DHAVE_EXECINFO_H=1 -DHAVE_CXXABI_H -DHAVE_MKL -I$(MKLROOT)/include \
+           -m64 -msse -msse2 -pthread \
+           -g -fpermissive -Wreorder # -O0 -DKALDI_PARANOID
+
+ifeq ($(KALDI_FLAVOR), dynamic)
+CXXFLAGS += -fPIC
+endif
+CXXFLAGS += -fPIC
+
+# Compiler specific flags
+COMPILER = $(shell $(CXX) -v 2>&1)
+ifeq ($(findstring clang,$(COMPILER)),clang)
+# Suppress annoying clang warnings that are perfectly valid per spec.
+CXXFLAGS += -Wno-mismatched-tags
+endif
+
+## Use the following for STATIC LINKING of the SEQUENTIAL version of MKL
+MKL_STA_SEQ = $(MKLLIB)/libmkl_solver_lp64_sequential.a -Wl,--start-group \
+	$(MKLLIB)/libmkl_intel_lp64.a $(MKLLIB)/libmkl_sequential.a \
+	$(MKLLIB)/libmkl_core.a -Wl,--end-group -lpthread
+
+## Use the following for STATIC LINKING of the MULTI-THREADED version of MKL
+MKL_STA_MUL = $(MKLLIB)/libmkl_solver_lp64.a -Wl,--start-group \
+	$(MKLLIB)/libmkl_intel_lp64.a $(MKLLIB)/libmkl_intel_thread.a \
+	$(MKLLIB)/libmkl_core.a -Wl,--end-group $(MKLLIB)/libiomp5.a -lpthread
+
+## Use the following for DYNAMIC LINKING of the SEQUENTIAL version of MKL
+MKL_DYN_SEQ = -L$(MKLLIB) -lmkl_solver_lp64_sequential -Wl,--start-group \
+	-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -Wl,--end-group -lpthread
+
+## Use the following for DYNAMIC LINKING of the MULTI-THREADED version of MKL
+MKL_DYN_MUL = -L$(MKLLIB) -lmkl_solver_lp64 -Wl,--start-group -lmkl_intel_lp64 \
+	-lmkl_intel_thread -lmkl_core -Wl,--end-group -liomp5 -lpthread
+
+# MKLFLAGS = $(MKL_DYN_MUL)
+
+LDFLAGS = $(EXTRA_LDFLAGS) $(OPENFSTLDFLAGS) -rdynamic
+LDLIBS = $(EXTRA_LDLIBS) $(OPENFSTLIBS) $(MKLFLAGS) -lm -lpthread -ldl
+MKLFLAGS =  -Wl,--start-group /aifs1/tools/INTEL/mkl2017/mkl/lib/intel64/libmkl_intel_lp64.a /aifs1/tools/INTEL/mkl2017/mkl/lib/intel64/libmkl_core.a /aifs1/tools/INTEL/mkl2017/mkl/lib/intel64/libmkl_sequential.a -Wl,--end-group    -ldl -lpthread -lm 
+
+# CUDA configuration
+
+CUDA = true
+CUDATKDIR = /usr/local/cuda
+CUDA_ARCH = -gencode arch=compute_20,code=sm_20 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_53,code=sm_53 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_62,code=sm_62
+
+ifndef DOUBLE_PRECISION
+$(error DOUBLE_PRECISION not defined.)
+endif
+ifndef CUDATKDIR
+$(error CUDATKDIR not defined.)
+endif
+
+CUDA_INCLUDE= -I$(CUDATKDIR)/include
+CUDA_FLAGS = -g -Xcompiler -fPIC --verbose --machine 64 -DHAVE_CUDA \
+             -DKALDI_DOUBLEPRECISION=$(DOUBLE_PRECISION)
+CXXFLAGS += -DHAVE_CUDA -I$(CUDATKDIR)/include
+#CUDA_LDFLAGS += -L$(CUDATKDIR)/lib64 -Wl,-rpath,$(CUDATKDIR)/lib64
+#CUDA_LDLIBS += -lcublas -lcudart -lcurand #LDLIBS : The libs are loaded later than static libs in implicit rule
+CUDA_LDLIBS += -Wl,--start-group $(CUDATKDIR)/lib64/libcublas_static.a $(CUDATKDIR)/lib64/libcurand_static.a $(CUDATKDIR)/lib64/libcudnn_static.a $(CUDATKDIR)/lib64/libculibos.a $(CUDATKDIR)/lib64/libcudart_static.a -Wl,--end-group -lrt
+
+#Next section enables MPI
+# Environment configuration
+MPICHDIR = /aifs1/tools/MPI/mpich-3.2/mpich-install
+CXXFLAGS += -I$(MPICHDIR)/include
+MPICH_INCLUDE = -I$(MPICHDIR)/include
+#MPICH_LDLIBS += -L$(MPICHDIR)/lib -Wl,-rpath,$(MPICHDIR)/lib -Wl,--enable-new-dtags -lmpi
+MPICH_LDLIBS += -Wl,--start-group $(MPICHDIR)/lib/libmpi.a -Wl,--end-group
