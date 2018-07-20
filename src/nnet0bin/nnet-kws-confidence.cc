@@ -54,10 +54,10 @@ int main(int argc, char *argv[]) {
     po.Register("keywords-id", &keywords_str, "keywords index in network output(e.g. 348|363:369|328|355:349.");
 
     int32 word_interval = 30;
-	po->Register("word-interval", &word_interval, "Word interval between each keyword");
+	po.Register("word-interval", &word_interval, "Word interval between each keyword");
 
 	BaseFloat wakeup_threshold = 0.5;
-	po->Register("wakeup-threshold", &wakeup_threshold, "Greater or equal this threshold will be wakeup.");
+	po.Register("wakeup-threshold", &wakeup_threshold, "Greater or equal this threshold will be wakeup.");
 
     po.Read(argc, argv);
 
