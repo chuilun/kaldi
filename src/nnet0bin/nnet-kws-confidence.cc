@@ -44,14 +44,20 @@ int main(int argc, char *argv[]) {
     using namespace kaldi::nnet0;
     typedef kaldi::int32 int32;
 
-    int32 w_smooth = 10;
+    int32 w_smooth = 7;
     po.Register("smooth-window", &w_smooth, "Smooth the posteriors over a fixed time window of size smooth-window.");
-    int32 w_max = 40;
+    int32 w_max = 30;
     po.Register("sliding-window", &w_max, "The confidence score is computed within a sliding window of size sliding-window.");
 
 
     std::string keywords_str;
     po.Register("keywords-id", &keywords_str, "keywords index in network output(e.g. 348|363:369|328|355:349.");
+
+    int32 word_interval = 30;
+	po->Register("word-interval", &word_interval, "Word interval between each keyword");
+
+	BaseFloat wakeup_threshold = 0.5;
+	po->Register("wakeup-threshold", &wakeup_threshold, "Greater or equal this threshold will be wakeup.");
 
     po.Read(argc, argv);
 
@@ -81,77 +87,150 @@ int main(int argc, char *argv[]) {
     BaseFloatMatrixWriter confidence_writer(confidence_wspecifier);
     //BaseFloatVectorWriter confidence_writer(confidence_wspecifier);
 
-    Matrix<BaseFloat> post_smooth, confidence;
+    Matrix<BaseFloat> post_smooth, confidence, buffer;
 
     Timer time;
     double time_now = 0;
     int32 num_done = 0;
+    float score;
+    int wakeup_frame, iswakeup;
 
     // iterate over all feature files
     for (; !output_reader.Done(); output_reader.Next()) {
-      // read
-      const Matrix<BaseFloat> &mat = output_reader.Value();
-      std::string utt = output_reader.Key();
-      KALDI_VLOG(2) << "Processing utterance " << num_done+1 
-                    << ", " << utt
-                    << ", " << mat.NumRows() << "frm";
+		// read
+		const Matrix<BaseFloat> &posterior = output_reader.Value();
+		std::string utt = output_reader.Key();
+		KALDI_VLOG(2) << "Processing utterance " << num_done+1
+					<< ", " << utt
+					<< ", " << posterior.NumRows() << "frm";
 
-      // kws confidence
-      int rows = mat.NumRows();
-      //int cols = mat.NumCols();
-      int cols = kws_str.size()+1;
-      post_smooth.Resize(rows, cols);
-      confidence.Resize(rows, 2*cols);
-      int hs, hm;
-      float sum, max, maxid, mul;
+		// kws confidence
+		int rows = posterior.NumRows();
+		//int cols = mat.NumCols();
+		int cols = kws_str.size()+1;
+		post_smooth.Resize(rows, cols);
+		confidence.Resize(rows, 2*cols);
+		buffer.Resize(w_max+1, keywords.size()*2+1);
 
-      // posterior smoothing
-      for (int j = 0; j < rows; j++) {
+		int hs, hm, pre_t, cur_t;
+		float sum, mul, sscore, pre_score;
+
+		// posterior smoothing
+		for (int j = 0; j < rows; j++) {
 		  for (int i = 1; i < cols; i++) {
 			  hs = j-w_smooth+1 > 0 ? j-w_smooth+1 : 0;
 			  sum = 0;
 			  for (int k = hs; k <= j; k++) {
 				  for (int m = 0; m < keywords[i-1].size(); m++)
-					  sum += mat(k, keywords[i-1][m]);
+					  sum += posterior(k, keywords[i-1][m]);
 			  }
 			  post_smooth(j, i) = sum/(j-hs+1);
 		  }
-      }
+		}
 
-      // compute confidence score
-      // confidence.Set(1.0);
-      for (int j = 0; j < rows; j++) {
-          mul = 1.0;
-		  for (int i = 1; i < cols; i++) { // 1,2,...,n-1 keywords
-			  hm = j-w_max+1 > 0 ? j-w_max+1 : 0;
-			  max = 0;
-			  maxid = hm;
-			  for (int k = hm; k <= j; k++) {
-				  if (max < post_smooth(k, i)) {
-					   max = post_smooth(k, i);
-					   maxid = k;
-				  }
-			  }
-			  confidence(j,2*i) = max;
-			  confidence(j,2*i+1) = maxid;
-			  mul *= max;
-		  }
-    	  	  confidence(j,0) = pow(mul, 1.0/(cols-1));
-    	  	  confidence(j,1) = j;
-      }
+		// compute confidence score
+		// confidence.Set(1.0);
+		for (int j = 0; j < rows; j++) {
+			mul = 1.0;
+			hm = j-w_max+1 > 0 ? j-w_max+1 : 0;
 
-      smooth_writer.Write(output_reader.Key(), post_smooth);
-      confidence_writer.Write(output_reader.Key(), confidence);
+			// the first keyword
+			for (int k = 1; k <= j-hm+1; k++) {
+				buffer(k, 1) = post_smooth(k+hm-1,1);
+				buffer(k, 2) = k; // time stamp
+				if (buffer(k, 1) < buffer(k-1, 1)) {
+					buffer(k, 1) = buffer(k-1, 1);
+					buffer(k, 2) = buffer(k-1, 2);
+				}
+			}
 
-      // progress log
-      if (num_done % 100 == 0) {
-        time_now = time.Elapsed();
-        KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
-                      << time_now/60 << " min; processed " << tot_t/time_now
-                      << " frames per second.";
-      }
-      num_done++;
-      tot_t += mat.NumRows();
+			// 2,...,n keywords
+			for (int i = 2; i < cols; i++) {
+				for (int k = i; k <= j-hm+1; k++) {
+					buffer(k, 2*i-1) = buffer(k-1, 2*i-1);
+					buffer(k, 2*i) = buffer(k-1, 2*i);
+					sscore = buffer(k-1, 2*i-3) * post_smooth(k+hm-1, i);
+					if (buffer(k, 2*i-1) < sscore) {
+						buffer(k, 2*i-1) = sscore;
+						buffer(k, 2*i) = k-1; //(k-1)+(hm-1);
+					}
+				}
+			}
+
+	        // final score
+			mul = buffer(j-hm+1, 2*(cols-1)-1);
+			confidence(j,0) = pow(mul, 1.0/(cols-1));
+			confidence(j,1) = j; // time stamp
+
+			// back tracking
+			cur_t = j-hm+1;
+			for (int i = cols-1; i > 1; i--) {
+				pre_t = buffer(cur_t, 2*i);
+				pre_score = buffer(pre_t, 2*(i-1)-1);
+
+				// the nth keyword score
+				confidence(j,2*i) = mul/pre_score;
+
+				// the nth keyword time stamp
+				confidence(j,2*i+1) = (pre_t+1)+(hm-1);
+
+				mul = pre_score;
+				cur_t = pre_t;
+			}
+
+			confidence(j,2) = buffer(cur_t, 1);
+			confidence(j,3) = buffer(cur_t, 2)+(hm-1);
+		}
+
+		smooth_writer.Write(output_reader.Key(), post_smooth);
+		confidence_writer.Write(output_reader.Key(), confidence);
+
+		// is wakeup?
+		bool flag = true;
+		score = wakeup_frame = iswakeup = 0;
+		int interval;
+		for (int j = 0; j < rows; j++) {
+			for (int i = 2; i < cols; i++) {
+				interval = confidence(j,2*i+1)-confidence(j,2*(i-1)+1);
+				if (interval >= word_interval || interval <= 0) {
+					flag = false;
+					break;
+				}
+			}
+
+			if (score < confidence(j,0)) {
+				score = confidence(j,0);
+				wakeup_frame = j;
+			}
+
+			if (confidence(j,0) >= wakeup_threshold && flag) {
+				iswakeup = 1;
+			}
+		}
+
+		// report results
+		std::ostringstream os;
+		os << wakeup_frame << " ";
+		for (int i = 0; i < cols; i++) {
+			os << confidence(wakeup_frame,2*i) << " ";
+		}
+		os << confidence(wakeup_frame, 3) << " ";
+		for (int i = 2; i < cols; i++) {
+			os << confidence(wakeup_frame,2*i+1)-confidence(wakeup_frame,2*(i-1)+1) << "\t";
+		}
+		os << std::endl;
+		KALDI_VLOG(1) << os.str();
+
+
+		// progress log
+		if (num_done % 100 == 0) {
+			time_now = time.Elapsed();
+			KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+						  << time_now/60 << " min; processed " << tot_t/time_now
+						  << " frames per second.";
+		}
+		num_done++;
+		tot_t += posterior.NumRows();
     }
     
     // final message
