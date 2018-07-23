@@ -209,17 +209,21 @@ int main(int argc, char *argv[]) {
 		}
 
 		// report results
-		std::ostringstream os;
-		os << wakeup_frame << " ";
-		for (int i = 0; i < cols; i++) {
-			os << confidence(wakeup_frame,2*i) << " ";
+		if (kaldi::g_kaldi_verbose_level >= 1) {
+			std::ostringstream os;
+			os << wakeup_frame << " ";
+			for (int i = 0; i < cols; i++) {
+				os << confidence(wakeup_frame,2*i) << " ";
+			}
+			os << confidence(wakeup_frame, 3) << " ";
+			for (int i = 2; i < cols; i++) {
+				os << confidence(wakeup_frame,2*i+1)-confidence(wakeup_frame,2*(i-1)+1) << "\t";
+			}
+			os << std::endl;
+			KALDI_VLOG(1) << os.str();
 		}
-		os << confidence(wakeup_frame, 3) << " ";
-		for (int i = 2; i < cols; i++) {
-			os << confidence(wakeup_frame,2*i+1)-confidence(wakeup_frame,2*(i-1)+1) << "\t";
-		}
-		os << std::endl;
-		KALDI_VLOG(1) << os.str();
+
+		KALDI_LOG << iswakeup << " " << std::string(utt);
 
 
 		// progress log
