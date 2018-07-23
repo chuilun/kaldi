@@ -205,6 +205,7 @@ int main(int argc, char *argv[]) {
 
 			if (confidence(j,0) >= wakeup_threshold && flag) {
 				iswakeup = 1;
+				break;
 			}
 		}
 
