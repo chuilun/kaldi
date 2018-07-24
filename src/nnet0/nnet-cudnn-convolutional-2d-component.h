@@ -241,8 +241,8 @@ public:
                                                  filt_y_step_, 
                                                  filt_x_step_, 
                                                  1,
-                                                 1, 
-                                                 CUDNN_CONVOLUTION));
+                                                 1,
+                                                 CUDNN_CONVOLUTION,CUDNN_DATA_FLOAT));
 
        CU_SAFE_CALL(cudnnSetTensor4dDescriptorEx(in_desc_, 
                                               CUDNN_DATA_FLOAT, 

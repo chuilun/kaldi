@@ -186,10 +186,11 @@ int main(int argc, char *argv[]) {
 		confidence_writer.Write(output_reader.Key(), confidence);
 
 		// is wakeup?
-		bool flag = true;
-		score = wakeup_frame = iswakeup = 0;
+		bool flag;
 		int interval;
+		score = wakeup_frame = iswakeup = 0;
 		for (int j = 0; j < rows; j++) {
+            flag = true;
 			for (int i = 2; i < cols; i++) {
 				interval = confidence(j,2*i+1)-confidence(j,2*(i-1)+1);
 				if (interval >= word_interval || interval <= 0) {
@@ -205,7 +206,6 @@ int main(int argc, char *argv[]) {
 
 			if (confidence(j,0) >= wakeup_threshold && flag) {
 				iswakeup = 1;
-				break;
 			}
 		}
 
