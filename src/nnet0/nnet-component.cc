@@ -24,6 +24,7 @@
 #include "nnet0/nnet-kl-hmm.h"
 #include "nnet0/nnet-affine-transform.h"
 #include "nnet0/nnet-time-delay-transform.h"
+#include "nnet0/nnet-c-time-delay-transform.h"
 #include "nnet0/nnet-batchnorm-transform.h"
 #include "nnet0/nnet-linear-transform.h"
 #include "nnet0/nnet-rbm.h"
@@ -69,6 +70,7 @@ namespace nnet0 {
 const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kAffineTransform,"<AffineTransform>" },
   { Component::kTimeDelayTransform,"<TimeDelayTransform>" },
+  { Component::kCompressedTimeDelayTransform,"<CompressedTimeDelayTransform>" },
   { Component::kWordVectorTransform,"<WordVectorTransform>" },
   { Component::kClassAffineTransform,"<ClassAffineTransform>" },
   { Component::kCBSoftmax,"<CBSoftmax>" },
@@ -154,6 +156,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kTimeDelayTransform :
       ans = new TimeDelayTransform(input_dim, output_dim);
+      break;
+    case Component::kCompressedTimeDelayTransform :
+      ans = new CompressedTimeDelayTransform(input_dim, output_dim);
       break;
     case Component::kWordVectorTransform :
       ans = new WordVectorTransform(input_dim, output_dim);
