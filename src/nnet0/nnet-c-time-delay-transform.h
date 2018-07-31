@@ -170,8 +170,8 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
     dim_in_ = input_dim_ / num_input_context_;
     dim_out_ = output_dim_ / num_output_context_;
     rank_ = linearity_u_.NumCols();
-    linearity_corr_u_.Resize(dim_out_, rank_);
-    linearity_corr_v_.Resize(rank_, dim_in_ * num_indexes_);
+    linearity_u_corr_.Resize(dim_out_, rank_);
+    linearity_v_corr_.Resize(rank_, dim_in_ * num_indexes_);
     bias_corr_.Resize(dim_out_);
 
     KALDI_ASSERT(linearity_u_.NumRows() == dim_out_);
@@ -220,17 +220,18 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
   }
   
   std::string Info() const {
-    return std::string("\n  linearity") + MomentStatistics(linearity_u_) + MomentStatistics(linearity_v_) +
-           "\n  bias" + MomentStatistics(bias_);
+    return std::string("  ") +
+      "\n  linearity_u_  "   + MomentStatistics(linearity_u_) +
+      "\n  linearity_v_  "   + MomentStatistics(linearity_v_) +
+      "\n  bias_  "     + MomentStatistics(bias_);
   }
 
   std::string InfoGradient() const {
-    return std::string("\n  linearity_grad") + MomentStatistics(linearity_corr_u_) + MomentStatistics(linearity_corr_v_) +
-           ", lr-coef " + ToString(learn_rate_coef_) +
-           ", max-norm " + ToString(max_norm_) +
-           "\n  bias_grad" + MomentStatistics(bias_corr_) + 
-           ", lr-coef " + ToString(bias_learn_rate_coef_);
-           
+    return std::string("  ") +
+      "\n  Gradients:" +
+      "\n  linearity_u_corr_ " + MomentStatistics(linearity_u_corr_) +
+      "\n  linearity_v_corr_ " + MomentStatistics(linearity_v_corr_) +
+      "\n  bias_grad" + MomentStatistics(bias_corr_);
   }
 
 
@@ -263,7 +264,7 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 	  in_diff->SetZero();
 
 	  // we will need the buffers
-	  diff_output_u_.Resize(num_frames*num_output_context_, rank_, kUndefined);
+	  diff_output_v_.Resize(num_frames*num_output_context_, rank_, kUndefined);
 	  diff_output_.Resize(num_frames*num_output_context_, dim_in_*num_indexes_, kUndefined);
 	  diff_patches_.Resize(num_frames*num_output_context_, dim_out_, kUndefined);
 
@@ -271,8 +272,8 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 		  diff_patches_.RowRange(i*num_frames, num_frames).CopyFromMat(out_diff.ColRange(i*dim_out_, dim_out_));
 
 	  // multiply error derivative by weights
-	  diff_output_u_.AddMatMat(1.0, diff_patches_, kNoTrans, linearity_u_, kNoTrans, 0.0);
-	  diff_output_.AddMatMat(1.0, diff_output_u_, kNoTrans, linearity_v_, kNoTrans, 0.0);
+	  diff_output_v_.AddMatMat(1.0, diff_patches_, kNoTrans, linearity_u_, kNoTrans, 0.0);
+	  diff_output_.AddMatMat(1.0, diff_output_v_, kNoTrans, linearity_v_, kNoTrans, 0.0);
 
 
 	  for(int i = 0; i < num_output_context_; i++)
@@ -282,8 +283,8 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 
   void ResetGradient()
   {
-      linearity_corr_u_.SetZero();
-      linearity_corr_v_.SetZero();
+      linearity_u_corr_.SetZero();
+      linearity_v_corr_.SetZero();
       bias_corr_.SetZero();
   }
 
@@ -301,8 +302,8 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 		local_lrate_bias = -lr_bias;
 
 		// compute gradient (incl. momentum)
-		linearity_corr_u_.AddMatMat(1.0, diff_patches_, kTrans, forward_output_v_, kNoTrans, mmt);
-		linearity_corr_v_.AddMatMat(1.0, diff_output_u_, kTrans, input_patches_, kNoTrans, mmt);
+		linearity_u_corr_.AddMatMat(1.0, diff_patches_, kTrans, forward_output_v_, kNoTrans, mmt);
+		linearity_v_corr_.AddMatMat(1.0, diff_output_v_, kTrans, input_patches_, kNoTrans, mmt);
 		bias_corr_.AddRowSumMat(1.0, diff_patches_, mmt);
 
 		// l2 regularization
@@ -312,16 +313,16 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 		}
 		// l1 regularization
 		if (l1 != 0.0) {
-		  cu::RegularizeL1(&linearity_u_, &linearity_corr_u_, lr*l1*num_frames, lr);
-		  cu::RegularizeL1(&linearity_v_, &linearity_corr_v_, lr*l1*num_frames, lr);
+		  cu::RegularizeL1(&linearity_u_, &linearity_u_corr_, lr*l1*num_frames, lr);
+		  cu::RegularizeL1(&linearity_v_, &linearity_v_corr_, lr*l1*num_frames, lr);
 		}
   }
 
   void UpdateGradient()
   {
 	    	// update
-		linearity_u_.AddMat(local_lrate, linearity_corr_u_);
-		linearity_v_.AddMat(local_lrate, linearity_corr_v_);
+		linearity_u_.AddMat(local_lrate, linearity_u_corr_);
+		linearity_v_.AddMat(local_lrate, linearity_v_corr_);
 		bias_.AddVec(local_lrate_bias, bias_corr_);
   }
 
@@ -335,8 +336,8 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
     // we will also need the number of frames in the mini-batch
     const int32 num_frames = input.NumRows();
     // compute gradient (incl. momentum)
-	linearity_corr_u_.AddMatMat(1.0, diff_patches_, kTrans, forward_output_v_, kNoTrans, mmt);
-	linearity_corr_v_.AddMatMat(1.0, diff_output_u_, kTrans, input_patches_, kNoTrans, mmt);
+	linearity_u_corr_.AddMatMat(1.0, diff_patches_, kTrans, forward_output_v_, kNoTrans, mmt);
+	linearity_v_corr_.AddMatMat(1.0, diff_output_v_, kTrans, input_patches_, kNoTrans, mmt);
 	bias_corr_.AddRowSumMat(1.0, diff_patches_, mmt);
     // l2 regularization
     if (l2 != 0.0) {
@@ -345,12 +346,12 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
     }
     // l1 regularization
     if (l1 != 0.0) {
-    	cu::RegularizeL1(&linearity_u_, &linearity_corr_u_, lr*l1*num_frames, lr);
-    	cu::RegularizeL1(&linearity_v_, &linearity_corr_v_, lr*l1*num_frames, lr);
+    	cu::RegularizeL1(&linearity_u_, &linearity_u_corr_, lr*l1*num_frames, lr);
+    	cu::RegularizeL1(&linearity_v_, &linearity_v_corr_, lr*l1*num_frames, lr);
     }
     // update
-    linearity_u_.AddMat(-lr, linearity_corr_u_);
-    linearity_v_.AddMat(-lr, linearity_corr_v_);
+    linearity_u_.AddMat(-lr, linearity_u_corr_);
+    linearity_v_.AddMat(-lr, linearity_v_corr_);
     bias_.AddVec(-lr_bias, bias_corr_);
   }
 
@@ -388,7 +389,7 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 		src_pitch = dim.stride*sizeof(BaseFloat);
 		dst_pitch = src_pitch;
 		width = dim.cols*sizeof(BaseFloat);
-        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_u_.Data());
 		src = (void*) (direction==0 ? (char *)linearity_u_.Data() : ((char *)host+pos));
 		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
 		pos += linearity_u_.SizeInBytes();
@@ -397,7 +398,7 @@ class CompressedTimeDelayTransform : public UpdatableComponent {
 		src_pitch = dim.stride*sizeof(BaseFloat);
 		dst_pitch = src_pitch;
 		width = dim.cols*sizeof(BaseFloat);
-		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_v_.Data());
 		src = (void*) (direction==0 ? (char *)linearity_v_.Data() : ((char *)host+pos));
 		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
 		pos += linearity_v_.SizeInBytes();
@@ -434,12 +435,12 @@ protected:
   CuMatrix<BaseFloat> forward_output_, forward_output_v_;
 
   CuMatrix<BaseFloat> diff_patches_;
-  CuMatrix<BaseFloat> diff_output_, diff_output_u_;
+  CuMatrix<BaseFloat> diff_output_, diff_output_v_;
 
   // weights
   CuMatrix<BaseFloat> linearity_u_, linearity_v_;
   CuVector<BaseFloat> bias_;
-  CuMatrix<BaseFloat> linearity_corr_u_, linearity_corr_v_;
+  CuMatrix<BaseFloat> linearity_u_corr_, linearity_v_corr_;
   CuVector<BaseFloat> bias_corr_;
 
   BaseFloat learn_rate_coef_;
