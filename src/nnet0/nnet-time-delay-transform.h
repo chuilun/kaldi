@@ -73,12 +73,16 @@ class TimeDelayTransform : public UpdatableComponent {
       else if (token == "<NumOutputContext>") ReadBasicType(is, false, &num_output_context_);
       else if (token == "<NumIndexes>") {
 		  ReadBasicType(is, false, &num_indexes_);
-		  for(int i = 0; i < num_output_context_; i++)
-		  {
+		  ExpectToken(is, false, "<InputContext>");
+		  for(int j = 0; j< num_indexes_; j++) {
+			  ReadBasicType(is, false, &index);
+			  input_context_.push_back(index);
+		  }
+
+		  for(int i = 0; i < num_output_context_; i++) {
 			  ExpectToken(is, false, "<Indexes>");
 			  std::vector<int32> indexes;
-			  for(int j = 0; j< num_indexes_; j++)
-			  {
+			  for(int j = 0; j< num_indexes_; j++) {
 				  ReadBasicType(is, false, &index);
 				  indexes.push_back(index);
 			  }
@@ -144,6 +148,11 @@ class TimeDelayTransform : public UpdatableComponent {
 		ReadBasicType(is, binary, &num_indexes_);
 		input_context_indexes_.resize(num_output_context_);
 
+		ExpectToken(is,binary, "<InputContext>");
+		input_context_.resize(num_indexes_);
+		for(int i = 0; i < num_indexes_; i++)
+			ReadBasicType(is, binary, &input_context_[i]);
+
 		for(int i = 0; i < num_output_context_; i++) {
 			input_context_indexes_[i].resize(num_indexes_);
 			for(int j = 0; j < num_indexes_; j++)
@@ -178,6 +187,12 @@ class TimeDelayTransform : public UpdatableComponent {
 	WriteBasicType(os, binary, num_output_context_);
 	WriteToken(os,binary, "<NumIndexes>");
 	WriteBasicType(os, binary, num_indexes_);
+
+	WriteToken(os,binary, "<InputContext>");
+	for(int i = 0; i < num_indexes_; i++) {
+		WriteBasicType(os, binary, input_context_[i]);
+	}
+
 	for(int i = 0; i < num_output_context_; i++) {
 		for(int j = 0; j < num_indexes_; j++)
 			WriteBasicType(os, binary, input_context_indexes_[i][j]);
@@ -439,6 +454,7 @@ protected:
   int32 dim_in_;
   int32 dim_out_;
   std::vector<std::vector<int32> > input_context_indexes_;
+  std::vector<int32> input_context_;
 
   CuMatrix<BaseFloat> input_patches_;
   CuMatrix<BaseFloat> forward_output_;
