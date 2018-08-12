@@ -154,6 +154,7 @@ class TimeDelayTransform : public UpdatableComponent {
 			ReadBasicType(is, binary, &input_context_[i]);
 
 		for(int i = 0; i < num_output_context_; i++) {
+			ExpectToken(is, false, "<Indexes>");
 			input_context_indexes_[i].resize(num_indexes_);
 			for(int j = 0; j < num_indexes_; j++)
 				ReadBasicType(is, binary, &input_context_indexes_[i][j]);
@@ -194,6 +195,7 @@ class TimeDelayTransform : public UpdatableComponent {
 	}
 
 	for(int i = 0; i < num_output_context_; i++) {
+	    WriteToken(os,binary, "<Indexes>");
 		for(int j = 0; j < num_indexes_; j++)
 			WriteBasicType(os, binary, input_context_indexes_[i][j]);
 	}

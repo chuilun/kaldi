@@ -9,7 +9,7 @@ LDLIBS += $(MPICH_LDLIBS)
 
 BINFILES = pid-test online-nnet-ipc-decoder  online-nnet-ipc-forward \
 		   online-nnet-wav-decoder  online-feature-extractor online-decoder-test \
-		   online-fast-decoder online-kws-test 
+		   online-fast-decoder online-kws-test
 
 OBJFILES =
 
