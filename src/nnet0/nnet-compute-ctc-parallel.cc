@@ -345,6 +345,13 @@ private:
 	        	ctc.EvalParallel(num_utt_frame_out, nnet_out, labels_utt, &nnet_diff);
 	        	// Error rates
 	        	ctc.ErrorRateMSeq(num_utt_frame_out, nnet_out, labels_utt);
+
+                /*
+                if (!KALDI_ISFINITE(nnet_out.Sum())) { // check there's no nan/inf,
+                    KALDI_ERR << "NaN or inf found in transformed-features for " << example->utt << "\n" << 
+                    labels_utt[0] << "\n" << labels_utt[1];
+                }   
+                */
 	        }
 	        else
 	        	KALDI_ERR<< "Unknown objective function code : " << objective_function;

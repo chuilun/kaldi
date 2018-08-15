@@ -54,6 +54,8 @@ namespace nnet0{
             KALDI_ASSERT((fmap_y_len_ + 2*pad_y_len_ - pool_y_len_)%pool_y_step_ == 0);
             KALDI_ASSERT(input_dim_ % (fmap_x_len_ * fmap_y_len_)==0) ;
             num_input_fmaps_ = input_dim_ /(fmap_x_len_ * fmap_y_len_);
+            KALDI_ASSERT(((fmap_x_len_ + 2*pad_x_len_ - pool_x_len_)/pool_x_step_ +1) * ((fmap_y_len_ + 2*pad_y_len_ - pool_y_len_)/pool_y_step_+1) \
+            * num_input_fmaps_  == output_dim_);
         }
 
         void Init(int32 batch_size){
