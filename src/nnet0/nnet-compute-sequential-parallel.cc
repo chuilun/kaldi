@@ -641,8 +641,11 @@ private:
 
 						if (max_frame_num < mat.NumRows()) max_frame_num = mat.NumRows();
 
+						 // apply optional feature transform
+						nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
+
 						keys[s] = key;
-						feats[s] = mat;
+						feats[s] = feats_transf;
 						curt[s] = 0;
 						lent[s] = feats[s].NumRows();
 						num_frames += lent[s];
@@ -691,20 +694,18 @@ private:
 						}
 					}
 
-					 // apply optional feature transform
-					nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
-
 					// for streams with new utterance, history states need to be reset
 					nnet.ResetLstmStreams(new_utt_flags, batch_size);
 
 					// forward pass
-					nnet.Propagate(feats_transf, &nnet_out);
+					cu_feats = feat;
+					nnet.Propagate(cu_feats, &nnet_out);
 
 					if (this->kld_scale > 0)
 					{
                         // for streams with new utterance, history states need to be reset
                         si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
-						si_nnet.Propagate(feats_transf, &si_nnet_out);
+						si_nnet.Propagate(cu_feats, &si_nnet_out);
 						si_nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
 						si_nnet_out.CopyToMat(&si_nnet_out_host);
 					}
